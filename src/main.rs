@@ -1,3 +1,8 @@
+// On Windows, build the binary as a *GUI* application so that no console
+// window pops up alongside the main window when the user double-clicks the
+// `.exe`. The `windows_subsystem` attribute is a no-op on other platforms.
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
 use eframe::egui;
 use pdf_manager_rust::app::PdfManagerApp;
 

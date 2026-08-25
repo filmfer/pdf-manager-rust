@@ -6,6 +6,8 @@ use std::io::Cursor;
 use std::path::Path;
 use std::process::Command;
 
+use crate::setup::HiddenCommand;
+
 pub const EXPORT_IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "bmp", "tiff"];
 
 /// Downscale an image so its longest side is at most `max_long_side` pixels.
@@ -184,6 +186,12 @@ pub fn pdf_to_images(
             output_dir.trim_end_matches('/').trim_end_matches('\\'),
             stem
         ))
+        // On Windows, pdftoppm.exe is a *console* application, so without
+        // this flag the OS would inherit (or create) a console window that
+        // flashes briefly every time the user runs PDF -> Images. The
+        // CREATE_NO_WINDOW flag (0x0800_0000) tells the OS to launch it
+        // silently, which is exactly what we want for a GUI app.
+        .apply_no_window_flag()
         .status()
         .with_context(|| format!("Failed to launch pdftoppm at {:?}", pdftoppm))?;
 
