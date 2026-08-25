@@ -2,3 +2,10 @@
 /build.log
 **/*.rs.bk
 
+# Test artefacts and temporary files
+/screenshot.png
+/screenshot.ps1
+/package.ps1
+/test_imgs/
+/tests/poppler_loc.rs
+
