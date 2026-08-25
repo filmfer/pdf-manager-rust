@@ -1,12 +1,14 @@
 use anyhow::{anyhow, Context, Result};
-use image::{DynamicImage, GenericImageView};
-use lopdf::Document;
+use image::{DynamicImage, GenericImageView, ImageReader};
+use lopdf::{Document, Object};
 use std::fs;
+use std::io::Cursor;
 use std::path::Path;
 use std::process::Command;
 
 pub const EXPORT_IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "bmp", "tiff"];
 
+/// Downscale an image so its longest side is at most `max_long_side` pixels.
 fn downscale_to_fit(img: DynamicImage, max_long_side: u32) -> DynamicImage {
     let (w, h) = img.dimensions();
     let long = w.max(h);
@@ -20,181 +22,194 @@ fn downscale_to_fit(img: DynamicImage, max_long_side: u32) -> DynamicImage {
     }
 }
 
+/// Convert one image file to (encoded bytes, filter name, color space name, w, h).
+/// Uses JPEG @ 85% quality for photos, PNG (lossless) for grayscale text-style images.
+fn encode_image(path_str: &str) -> Result<(Vec<u8>, String, String, u32, u32)> {
+    let bytes = fs::read(path_str)
+        .with_context(|| format!("Failed to read image: {}", path_str))?;
+    let img = ImageReader::new(Cursor::new(&bytes))
+        .with_guessed_format()
+        .with_context(|| format!("Failed to detect format: {}", path_str))?
+        .decode()
+        .with_context(|| format!("Failed to decode image: {}", path_str))?;
+    let img = downscale_to_fit(img, 2480);
+    let (w, h) = img.dimensions();
+    let use_jpeg = !matches!(
+        img,
+        DynamicImage::ImageLuma8(_) | DynamicImage::ImageLumaA8(_)
+    );
+    let (filter, encoded, color_space) = if use_jpeg {
+        let rgb = img.to_rgb8();
+        let mut buf: Vec<u8> = Vec::new();
+        let enc = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buf, 85);
+        use image::ImageEncoder as _;
+        enc.write_image(rgb.as_raw(), w, h, image::ExtendedColorType::Rgb8)?;
+        ("DCTDecode".to_string(), buf, "DeviceRGB".to_string())
+    } else {
+        let gray = img.to_luma8();
+        let mut buf: Vec<u8> = Vec::new();
+        let enc = image::codecs::png::PngEncoder::new(&mut buf);
+        use image::ImageEncoder as _;
+        enc.write_image(gray.as_raw(), w, h, image::ExtendedColorType::L8)?;
+        ("FlateDecode".to_string(), buf, "DeviceGray".to_string())
+    };
+    Ok((encoded, filter, color_space, w, h))
+}
+/// Build a new PDF document from a list of image file paths.
+/// Each image becomes a page sized to the image dimensions (1pt = 1/72 inch).
 pub fn images_to_pdf(image_paths: &[String], output: &str) -> Result<()> {
     if image_paths.is_empty() {
         return Err(anyhow!("No images provided"));
     }
     let mut doc = Document::with_version("1.5");
-    let pages_id = doc.new_object_id();
-    let mut page_refs: Vec<lopdf::Object> = Vec::new();
-    for path_str in image_paths {
-        let bytes = fs::read(path_str)
-            .with_context(|| format!("Failed to read image: {}", path_str))?;
-        let img = image::load_from_memory(&bytes)
-            .with_context(|| format!("Failed to decode image: {}", path_str))?;
-        let img = downscale_to_fit(img, 2480);
-        let (w, h) = img.dimensions();
-        let use_jpeg = !matches!(
-            img,
-            DynamicImage::ImageLuma8(_) | DynamicImage::ImageLumaA8(_)
-        );
-        let (filter, encoded, color_space) = if use_jpeg {
-            let rgb = img.to_rgb8();
-            let (iw, ih) = (rgb.width() as i32, rgb.height() as i32);
-            let mut buf: Vec<u8> = Vec::new();
-            let enc = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buf, 85);
-            use image::ImageEncoder as _;
-            enc.write_image(
-                rgb.as_raw(),
-                iw as u32,
-                ih as u32,
-                image::ExtendedColorType::Rgb8,
-            )?;
-            ("DCTDecode".to_string(), buf, "DeviceRGB".to_string())
-        } else {
-            let gray = img.to_luma8();
-            let (iw, ih) = (gray.width() as i32, gray.height() as i32);
-            let mut buf: Vec<u8> = Vec::new();
-            let enc = image::codecs::png::PngEncoder::new(&mut buf);
-            use image::ImageEncoder as _;
-            enc.write_image(
-                gray.as_raw(),
-                iw as u32,
-                ih as u32,
-                image::ExtendedColorType::L8,
-            )?;
-            ("FlateDecode".to_string(), buf, "DeviceGray".to_string())
-        };
-        let img_stream = lopdf::Stream::new(lopdf::Dictionary::new(), encoded);
-        let _img_id = doc.add_object(img_stream);
+    let mut page_refs: Vec<Object> = Vec::new();
+
+    for (idx, path_str) in image_paths.iter().enumerate() {
+        let (encoded, filter, color_space, w, h) = encode_image(path_str)?;
+        // The actual image stream - we save it to reuse its object id.
+        let img_stream = lopdf::Stream::new(lopdf::Dictionary::new(), encoded.clone());
+        let _img_obj_id = doc.add_object(img_stream);
+
         let mut img_info = lopdf::Dictionary::new();
-        img_info.set("Type", lopdf::Object::Name(b"XObject".to_vec()));
-        img_info.set("Subtype", lopdf::Object::Name(b"Image".to_vec()));
-        img_info.set("Width", lopdf::Object::Integer(w as i64));
-        img_info.set("Height", lopdf::Object::Integer(h as i64));
-        img_info.set("ColorSpace", lopdf::Object::Name(color_space.into_bytes()));
-        img_info.set("BitsPerComponent", lopdf::Object::Integer(8));
-        img_info.set("Filter", lopdf::Object::Name(filter.into_bytes()));
-        let xobject_id = doc.add_object(lopdf::Object::Dictionary(img_info));
+        img_info.set("Type", Object::Name(b"XObject".to_vec()));
+        img_info.set("Subtype", Object::Name(b"Image".to_vec()));
+        img_info.set("Width", Object::Integer(w as i64));
+        img_info.set("Height", Object::Integer(h as i64));
+        img_info.set("ColorSpace", Object::Name(color_space.into_bytes()));
+        img_info.set("BitsPerComponent", Object::Integer(8));
+        img_info.set("Filter", Object::Name(filter.into_bytes()));
+        let xobject_id = doc.add_object(Object::Dictionary(img_info));
+
+        // 1pt = 1/72 inch. We size each page to image dimensions (1px = 1pt) which
+        // is a common "screen" size (~72 DPI). The image preserves its full quality.
+        let w_pt = w as f32;
+        let h_pt = h as f32;
         let content = format!(
-            "q\n{} 0 0 {} 0 0 cm\n/Im0 Do\nQ\n",
-            w as f32 / 2.835,
-            h as f32 / 2.835
+            "q\n{} 0 0 {} 0 0 cm\n/Im{} Do\nQ\n",
+            w_pt, h_pt, idx
         );
         let content_stream = lopdf::Stream::new(lopdf::Dictionary::new(), content.into_bytes());
         let content_id = doc.add_object(content_stream);
+
         let mut resources = lopdf::Dictionary::new();
         let mut xobjects = lopdf::Dictionary::new();
-        xobjects.set("Im0", xobject_id);
-        resources.set("XObject", lopdf::Object::Dictionary(xobjects));
+        xobjects.set(format!("Im{}", idx), xobject_id);
+        resources.set("XObject", Object::Dictionary(xobjects));
         resources.set(
             "ProcSet",
-            lopdf::Object::Array(vec![
-                lopdf::Object::Name(b"PDF".to_vec()),
-                lopdf::Object::Name(b"Text".to_vec()),
-                lopdf::Object::Name(b"ImageC".to_vec()),
+            Object::Array(vec![
+                Object::Name(b"PDF".to_vec()),
+                Object::Name(b"ImageC".to_vec()),
+                Object::Name(b"ImageB".to_vec()),
+                Object::Name(b"ImageI".to_vec()),
             ]),
         );
+
         let mut page_dict = lopdf::Dictionary::new();
-        page_dict.set("Type", lopdf::Object::Name(b"Page".to_vec()));
+        page_dict.set("Type", Object::Name(b"Page".to_vec()));
+        page_dict.set("Parent", Object::Reference((0, 0)));
         page_dict.set(
             "MediaBox",
-            lopdf::Object::Array(vec![
-                lopdf::Object::Real(0.0),
-                lopdf::Object::Real(0.0),
-                lopdf::Object::Real(w as f32 / 2.835),
-                lopdf::Object::Real(h as f32 / 2.835),
+            Object::Array(vec![
+                Object::Real(0.0),
+                Object::Real(0.0),
+                Object::Real(w_pt as f32),
+                Object::Real(h_pt as f32),
             ]),
         );
-        page_dict.set("Resources", lopdf::Object::Dictionary(resources));
-        page_dict.set("Contents", content_id);
-        let page_id = doc.add_object(lopdf::Object::Dictionary(page_dict));
-        page_refs.push(lopdf::Object::Reference(page_id));
+        page_dict.set("Resources", Object::Dictionary(resources));
+        page_dict.set("Contents", Object::Reference(content_id));
+
+        let page_id = doc.add_object(Object::Dictionary(page_dict));
+        page_refs.push(Object::Reference(page_id));
     }
-    let mut pages_dict = lopdf::Dictionary::new();
-    pages_dict.set("Type", lopdf::Object::Name(b"Pages".to_vec()));
-    pages_dict.set("Count", page_refs.len() as i64);
-    pages_dict.set("Kids", page_refs);
-    doc.objects
-        .insert(pages_id, lopdf::Object::Dictionary(pages_dict));
-    let mut catalog_dict = lopdf::Dictionary::new();
-    catalog_dict.set("Type", lopdf::Object::Name(b"Catalog".to_vec()));
-    catalog_dict.set("Pages", pages_id);
-    let catalog_id = doc.add_object(lopdf::Object::Dictionary(catalog_dict));
-    doc.trailer.set("Root", catalog_id);
-    doc.compress();
+
+    let pages_id = doc.add_object({
+        let mut d = lopdf::Dictionary::new();
+        d.set("Type", Object::Name(b"Pages".to_vec()));
+        d.set("Kids", Object::Array(page_refs.clone()));
+        d.set("Count", Object::Integer(page_refs.len() as i64));
+        Object::Dictionary(d)
+    });
+
+    let mut catalog = lopdf::Dictionary::new();
+    catalog.set("Type", Object::Name(b"Catalog".to_vec()));
+    catalog.set("Pages", Object::Reference(pages_id));
+    let catalog_id = doc.add_object(Object::Dictionary(catalog));
+    doc.trailer.set("Root", Object::Reference(catalog_id));
+
     doc.save(output).context("Failed to save PDF")?;
     Ok(())
 }
-
-#[allow(dead_code)]
-fn _unused() {}
-
-/// Render specific pages of a PDF to image files using the
-/// `pdftoppm` command (part of Poppler). This avoids bundling
-/// a heavy native PDFium dependency.
+/// Convert a range of pages of a PDF to image files using `pdftoppm` (Poppler).
+/// Returns the list of output file paths produced.
 pub fn pdf_to_images(
     pdf_path: &str,
     output_dir: &str,
-    start: u32,
-    end: u32,
+    first_page: u32,
+    last_page: u32,
     dpi: u32,
-    format: &str,
+    image_format: &str,
 ) -> Result<Vec<String>> {
-    fs::create_dir_all(output_dir).context("Failed to create output directory")?;
+    if first_page == 0 || last_page < first_page {
+        return Err(anyhow!("Invalid page range"));
+    }
+    fs::create_dir_all(output_dir)
+        .with_context(|| format!("Failed to create output folder: {}", output_dir))?;
+
+    let pdftoppm = crate::setup::find_pdftoppm()
+        .ok_or_else(|| anyhow!("pdftoppm.exe not found. It should be bundled with the app."))?;
+
     let stem = Path::new(pdf_path)
         .file_stem()
         .map(|s| s.to_string_lossy().to_string())
         .unwrap_or_else(|| "page".to_string());
-    let template = Path::new(output_dir).join(format!("{}_", stem));
-    let template_str = template.to_string_lossy().to_string();
-    let mut cmd = Command::new("pdftoppm");
-    cmd.arg("-r").arg(dpi.to_string());
-    cmd.arg("-f").arg(start.to_string());
-    cmd.arg("-l").arg(end.to_string());
-    let fmt = format.to_lowercase();
-    match fmt.as_str() {
-        "png" => {
-            cmd.arg("-png");
-        }
-        "jpg" | "jpeg" => {
-            cmd.arg("-jpeg");
-        }
-        "bmp" => {
-            cmd.arg("-bmp");
-        }
-        "tiff" => {
-            cmd.arg("-tiff");
-        }
-        _ => {
-            cmd.arg("-png");
-        }
+
+    // -r DPI  -f first  -l last  -png | -jpeg  prefix
+    let fmt_flag = match image_format.to_lowercase().as_str() {
+        "jpg" | "jpeg" => "-jpeg",
+        "bmp" => "-bmp",
+        "tiff" | "tif" => "-tiff",
+        _ => "-png", // png (default)
+    };
+
+    let status = Command::new(&pdftoppm)
+        .arg(fmt_flag)
+        .arg("-r").arg(dpi.to_string())
+        .arg("-f").arg(first_page.to_string())
+        .arg("-l").arg(last_page.to_string())
+        .arg(pdf_path)
+        .arg(format!("{}/{}", output_dir.trim_end_matches('/').trim_end_matches('\\'), stem))
+        .status()
+        .with_context(|| format!("Failed to launch pdftoppm at {:?}", pdftoppm))?;
+
+    if !status.success() {
+        return Err(anyhow!("pdftoppm exited with code {:?}", status.code()));
     }
-    cmd.arg(pdf_path);
-    cmd.arg(&template_str);
-    let output = cmd.output().map_err(|e| {
-        anyhow!(
-            "Could not run 'pdftoppm'.\nPlease install Poppler (https://poppler.freedesktop.org/) and make sure 'pdftoppm' is on your PATH.\n\nUnderlying error: {}",
-            e
-        )
-    })?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(anyhow!("pdftoppm failed:\n{}", stderr));
-    }
-    let mut produced: Vec<String> = Vec::new();
-    let prefix = template
-        .file_name()
-        .map(|s| s.to_string_lossy().to_string())
-        .unwrap_or_default();
-    if let Ok(entries) = fs::read_dir(output_dir) {
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            if name.starts_with(&prefix) {
-                produced.push(entry.path().to_string_lossy().to_string());
+
+    // Collect the output files.
+    let ext = match image_format.to_lowercase().as_str() {
+        "jpg" | "jpeg" => "jpg",
+        "bmp" => "bmp",
+        "tiff" | "tif" => "tif",
+        _ => "png",
+    };
+    let mut out: Vec<String> = Vec::new();
+    let dir = Path::new(output_dir);
+    if let Ok(entries) = fs::read_dir(dir) {
+        for e in entries.flatten() {
+            let p = e.path();
+            if let Some(e) = p.extension() {
+                if e.eq_ignore_ascii_case(ext) {
+                    if let Some(name) = p.file_name().and_then(|s| s.to_str()) {
+                        if name.starts_with(&stem) {
+                            out.push(p.to_string_lossy().to_string());
+                        }
+                    }
+                }
             }
         }
     }
-    produced.sort();
-    Ok(produced)
+    out.sort();
+    Ok(out)
 }

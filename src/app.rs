@@ -8,8 +8,10 @@ use crate::pdf_ops;
 
 // Colour palette
 const ACCENT: Color32 = Color32::from_rgb(0x00, 0x78, 0xd4);
+const ACCENT_HOVER: Color32 = Color32::from_rgb(0x00, 0x5a, 0x9e);
 const BG: Color32 = Color32::from_rgb(0xf0, 0xf0, 0xf0);
 const FOOTER: Color32 = Color32::from_rgb(0x8a, 0x8a, 0x8a);
+const WHITE: Color32 = Color32::WHITE;
 const ERROR_COLOR: Color32 = Color32::from_rgb(0xcc, 0x33, 0x33);
 const SUCCESS_COLOR: Color32 = Color32::from_rgb(0x33, 0x99, 0x33);
 
@@ -97,10 +99,14 @@ impl eframe::App for PdfManagerApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.process_messages(ctx);
 
+        // The CentralPanel gives us the full window. Inside, we draw three
+        // vertical sections: the coloured header, the buttons (with 16 px
+        // left/right padding to mimic the Tkinter `padx=16`), and a footer.
         egui::CentralPanel::default()
             .frame(Frame::default().fill(BG))
             .show(ctx, |ui| {
                 self.draw_header(ui);
+                ui.add_space(4.0);
                 self.draw_buttons(ui);
                 self.draw_footer(ui);
             });
@@ -114,103 +120,96 @@ impl eframe::App for PdfManagerApp {
 
 impl PdfManagerApp {
     fn draw_header(&self, ui: &mut egui::Ui) {
-        ui.add_space(8.0);
-        ui.vertical_centered(|ui| {
-            ui.heading(egui::RichText::new(APP_NAME).size(28.0).strong());
-        });
-        ui.add_space(24.0);
-    }
-
-    fn draw_buttons(&mut self, ui: &mut egui::Ui) {
-        egui::Frame::group(ui.style())
-            .inner_margin(egui::Margin::same(20))
+        // Coloured header band (full window width). We use a Frame that
+        // draws a coloured rect, then a centred title and subtitle inside.
+        Frame::default()
+            .fill(ACCENT)
+            .inner_margin(egui::Margin::symmetric(16, 12))
             .show(ui, |ui| {
                 ui.vertical_centered(|ui| {
-                    let btn_width = 280.0;
-                    let btn_height = 44.0;
-                    if ui
-                        .add(
-                            egui::Button::new(egui::RichText::new("Merge PDFs").size(15.0))
-                                .min_size(Vec2::new(btn_width, btn_height))
-                                .fill(ACCENT),
-                        )
-                        .clicked()
-                    {
-                        self.action_merge();
-                    }
-                    ui.add_space(8.0);
-                    if ui
-                        .add(
-                            egui::Button::new(egui::RichText::new("Extract Pages").size(15.0))
-                                .min_size(Vec2::new(btn_width, btn_height))
-                                .fill(ACCENT),
-                        )
-                        .clicked()
-                    {
-                        self.action_open_extract();
-                    }
-                    ui.add_space(8.0);
-                    if ui
-                        .add(
-                            egui::Button::new(egui::RichText::new("Remove Pages").size(15.0))
-                                .min_size(Vec2::new(btn_width, btn_height))
-                                .fill(ACCENT),
-                        )
-                        .clicked()
-                    {
-                        self.action_open_remove();
-                    }
-                    ui.add_space(8.0);
-                    if ui
-                        .add(
-                            egui::Button::new(egui::RichText::new("Split PDF").size(15.0))
-                                .min_size(Vec2::new(btn_width, btn_height))
-                                .fill(ACCENT),
-                        )
-                        .clicked()
-                    {
-                        self.action_split();
-                    }
-                    ui.add_space(8.0);
-                    if ui
-                        .add(
-                            egui::Button::new(egui::RichText::new("Images to PDF").size(15.0))
-                                .min_size(Vec2::new(btn_width, btn_height))
-                                .fill(ACCENT),
-                        )
-                        .clicked()
-                    {
-                        self.action_images_to_pdf();
-                    }
-                    ui.add_space(8.0);
-                    if ui
-                        .add(
-                            egui::Button::new(egui::RichText::new("PDF to Images").size(15.0))
-                                .min_size(Vec2::new(btn_width, btn_height))
-                                .fill(ACCENT),
-                        )
-                        .clicked()
-                    {
-                        self.action_open_pdf_to_images();
-                    }
+                    ui.label(
+                        egui::RichText::new(APP_NAME)
+                            .size(18.0)
+                            .strong()
+                            .color(WHITE),
+                    );
+                });
+                ui.vertical_centered(|ui| {
+                    ui.label(
+                        egui::RichText::new("Merge  Extract  Remove  Split  Images <-> PDF")
+                            .size(10.0)
+                            .color(WHITE),
+                    );
                 });
             });
     }
 
+    fn draw_buttons(&mut self, ui: &mut egui::Ui) {
+        // Mimic the Python `ttk.Frame(padx=16, pady=(0,4))` content frame:
+        // a container with 16 px of inner margin on the left/right (small
+        // gap between the buttons and the window limits, exactly as the
+        // user asked) and 4 px at the top. Each button uses `fill=tk.X`
+        // semantics — it stretches from one side of the window to the
+        // other, with `pady=6` between buttons, matching the Tkinter
+        // `height=2` look.
+        Frame::default()
+            .inner_margin(egui::Margin::symmetric(16, 4))
+            .show(ui, |ui| {
+                ui.style_mut().spacing.item_spacing = Vec2::new(0.0, 6.0);
+                let btn_height = 40.0;
+                let labels: [&str; 6] = [
+                    "Merge PDFs",
+                    "Extract Pages",
+                    "Remove Pages",
+                    "Split PDF 1 page per file",
+                    "Create PDF from Images",
+                    "Export Pages to Images",
+                ];
+                let actions: [fn(&mut PdfManagerApp); 6] = [
+                    |a| a.action_merge(),
+                    |a| a.action_open_extract(),
+                    |a| a.action_open_remove(),
+                    |a| a.action_split(),
+                    |a| a.action_images_to_pdf(),
+                    |a| a.action_open_pdf_to_images(),
+                ];
+                for i in 0..labels.len() {
+                    // Full-width button, vertically sized to btn_height.
+                    let (rect, response) = ui.allocate_exact_size(
+                        Vec2::new(ui.available_width(), btn_height),
+                        egui::Sense::click(),
+                    );
+                    // Colour the rect with ACCENT (normal) / ACCENT_HOVER
+                    // (hovered) — the same hover effect the Tkinter
+                    // <Enter>/<Leave> bindings produced.
+                    let fill = if response.hovered() { ACCENT_HOVER } else { ACCENT };
+                    ui.painter().rect_filled(rect, 3.0, fill);
+                    ui.painter().text(
+                        rect.center(),
+                        egui::Align2::CENTER_CENTER,
+                        labels[i],
+                        egui::FontId::proportional(13.0),
+                        WHITE,
+                    );
+                    if response.clicked() {
+                        actions[i](self);
+                    }
+                }
+            });
+    }
+
     fn draw_footer(&self, ui: &mut egui::Ui) {
-        ui.add_space(24.0);
+        // Footer pinned to the bottom of the window, exactly like the
+        // `tk.Label(side=tk.BOTTOM)` in the original Python app.
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
-            ui.add_space(6.0);
-            ui.label(
-                egui::RichText::new(format!("{} <{}>", AUTHOR, AUTHOR_EMAIL))
-                    .small()
-                    .color(FOOTER),
-            );
             ui.add_space(2.0);
             ui.label(
-                egui::RichText::new("Built with Rust + egui")
-                    .small()
-                    .color(FOOTER),
+                egui::RichText::new(format!(
+                    "(c) 2026 {}  |  {}  |  Rust + egui",
+                    AUTHOR, AUTHOR_EMAIL
+                ))
+                .small()
+                .color(FOOTER),
             );
         });
     }
