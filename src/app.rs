@@ -10,7 +10,6 @@ use crate::pdf_ops;
 const ACCENT: Color32 = Color32::from_rgb(0x00, 0x78, 0xd4);
 const BG: Color32 = Color32::from_rgb(0xf0, 0xf0, 0xf0);
 const FOOTER: Color32 = Color32::from_rgb(0x8a, 0x8a, 0x8a);
-const WHITE: Color32 = Color32::WHITE;
 const ERROR_COLOR: Color32 = Color32::from_rgb(0xcc, 0x33, 0x33);
 const SUCCESS_COLOR: Color32 = Color32::from_rgb(0x33, 0x99, 0x33);
 
@@ -325,14 +324,14 @@ impl PdfManagerApp {
                         ui.add(
                             egui::DragValue::new(&mut self.extract_start)
                                 .range(1..=self.selected_pdf_page_count.max(1))
-                                .clamp_to_range(true),
+                                .clamp_existing_to_range(true),
                         );
                         ui.end_row();
                         ui.label("To page:");
                         ui.add(
                             egui::DragValue::new(&mut self.extract_end)
                                 .range(1..=self.selected_pdf_page_count.max(1))
-                                .clamp_to_range(true),
+                                .clamp_existing_to_range(true),
                         );
                         ui.end_row();
                     });
@@ -667,14 +666,14 @@ impl PdfManagerApp {
                         ui.add(
                             egui::DragValue::new(&mut self.export_start)
                                 .range(1..=self.export_input_page_count.max(1))
-                                .clamp_to_range(true),
+                                .clamp_existing_to_range(true),
                         );
                         ui.end_row();
                         ui.label("To page:");
                         ui.add(
                             egui::DragValue::new(&mut self.export_end)
                                 .range(1..=self.export_input_page_count.max(1))
-                                .clamp_to_range(true),
+                                .clamp_existing_to_range(true),
                         );
                         ui.end_row();
                         ui.label("DPI:");

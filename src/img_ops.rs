@@ -66,7 +66,7 @@ pub fn images_to_pdf(image_paths: &[String], output: &str) -> Result<()> {
             ("FlateDecode".to_string(), buf, "DeviceGray".to_string())
         };
         let img_stream = lopdf::Stream::new(lopdf::Dictionary::new(), encoded);
-        let img_id = doc.add_object(img_stream);
+        let _img_id = doc.add_object(img_stream);
         let mut img_info = lopdf::Dictionary::new();
         img_info.set("Type", lopdf::Object::Name(b"XObject".to_vec()));
         img_info.set("Subtype", lopdf::Object::Name(b"Image".to_vec()));

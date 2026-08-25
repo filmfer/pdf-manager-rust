@@ -1,0 +1,119 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            binary: pdf-manager-rust
+            asset_ext: ""
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary: pdf-manager-rust
+            asset_ext: .exe
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            binary: pdf-manager-rust
+            asset_ext: ""
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo registry & target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      # Linux/macOS: install poppler-utils so that `pdftoppm` is on PATH
+      # (used by the "PDF to Images" feature).
+      - name: Install poppler-utils (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
+
+      - name: Install poppler (macOS)
+        if: runner.os == 'macOS'
+        run: brew install poppler
+
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }} --locked
+
+      - name: Strip & rename Linux binary
+        if: runner.os == 'Linux'
+        run: |
+          strip "target/${{ matrix.target }}/release/${{ matrix.binary }}"
+          mv "target/${{ matrix.target }}/release/${{ matrix.binary}}" \
+             "target/${{ matrix.target }}/release/pdf-manager-rust-${{ matrix.target }}${{ matrix.asset_ext }}"
+
+      - name: Strip & rename Windows binary
+        if: runner.os == 'Windows'
+        run: |
+          mv "target/${{ matrix.target }}/release/${{ matrix.binary}}${{ matrix.asset_ext }}" \
+             "target/${{ matrix.target }}/release/pdf-manager-rust-${{ matrix.target }}${{ matrix.asset_ext }}"
+
+      - name: Strip & rename macOS binary
+        if: runner.os == 'macOS'
+        run: |
+          strip "target/${{ matrix.target }}/release/${{ matrix.binary}}" || true
+          mv "target/${{ matrix.target }}/release/${{ matrix.binary}}" \
+             "target/${{ matrix.target }}/release/pdf-manager-rust-${{ matrix.target }}${{ matrix.asset_ext }}"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf-manager-rust-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/pdf-manager-rust-${{ matrix.target }}${{ matrix.asset_ext }}
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Show downloaded artifacts
+        run: ls -la artifacts/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            artifacts/**/*.exe
+            artifacts/**/*
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
