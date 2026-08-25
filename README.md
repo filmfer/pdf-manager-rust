@@ -22,10 +22,23 @@ memory-efficient binary.
 
 | Metric              | Python (Tkinter + PyInstaller) | Rust (eframe/egui) |
 | ------------------- | ------------------------------ | ------------------ |
-| Binary size         | ~50 MB                         | **~4 MB**          |
-| Cold start          | 1–3 s                          | **< 200 ms**       |
-| RAM usage (idle)    | ~80 MB                         | **~10 MB**         |
-| Distribution        | Requires Python runtime        | Single static `.exe` |
+| Binary size         | ~50 MB                         | **~25 MB**¹        |
+| Cold start          | 1–3 s                          | **~35 ms**²        |
+| RAM usage (idle)    | ~80 MB                         | **~19 MB**³        |
+| Distribution        | Requires Python runtime        | Single folder⁴     |
+
+¹ The Windows binary is **~25 MB** because it bundles all 42 Poppler DLLs and
+   tools needed for the *PDF → Images* feature, so the `.exe` is fully
+   self-contained — copy it to any Windows 10/11 machine and it just runs.
+   On Linux/macOS the binary is **~3 MB** (uses the system-installed
+   `poppler-utils`).
+² Measured cold-start time on a Windows 11 machine (no window pre-warming).
+   The native `eframe` window is on screen in well under 50 ms.
+³ Working-set size (private + shared) ~19 MB, of which only **~0.5 MB** is
+   the app's *private* memory. The rest is shared OS/GPU resources.
+⁴ On Windows the binary must live next to the `poppler/` folder (it loads
+   `pdftoppm.exe` from there on first use). The GitHub release is distributed
+   as a single ZIP that contains both — no installer required.
 
 ## Tech Stack
 
@@ -33,14 +46,18 @@ memory-efficient binary.
 - **PDF** – [lopdf](https://github.com/nickel-org/lopdf) (pure-Rust, lossless, preserves original content)
 - **Images** – [image](https://github.com/image-rs/image) crate
 - **PDF → Images** – [`pdftoppm`](https://poppler.freedesktop.org/) from the Poppler project
+  (bundled as static binaries on Windows, system-installed `poppler-utils` on Linux/macOS)
 - **File dialogs** – [rfd](https://github.com/PolyMeilex/rfd) (native OS dialogs)
+- **App icon embedding** – [embed-resource](https://crates.io/crates/embed-resource) (Windows only)
 
 ## Installation
 
 ### Pre-built binary (Windows)
 
-Download the latest `pdf-manager-rust.exe` from the
-[Releases](../../releases) page and run it. No installation required.
+Download the latest `pdf-manager-rust-windows.zip` from the
+[Releases](https://github.com/filmfer/pdf-manager-rust/releases) page,
+unzip it anywhere, and double-click `pdf-manager-rust.exe`. No installation
+required — the ZIP contains the binary plus the bundled `poppler/` folder.
 
 ### From source
 
@@ -52,24 +69,32 @@ Requirements:
   or build without the PDF → Images feature)
 
 ```bash
-git clone https://github.com/<your-user>/pdf-manager-rust
+git clone https://github.com/filmfer/pdf-manager-rust
 cd pdf-manager-rust
 cargo build --release
 ./target/release/pdf-manager-rust
 ```
 
 The release binary uses `opt-level = "z"`, LTO, `codegen-units = 1`, and
-`strip = true` for the smallest possible size.
+`strip = true` for the smallest possible size. On Windows the `poppler/`
+folder is also required next to the binary for the *PDF → Images* feature
+(it is already in the repo and copied to `target/release/poppler/` by the
+build script).
 
 ## Project Layout
 
 ```
 src/
 ├── main.rs        # entry-point, builds the eframe window
-├── lib.rs         # exposes app / img_ops / pdf_ops modules
+├── lib.rs         # exposes app / img_ops / pdf_ops / setup modules
 ├── app.rs         # the GUI: state, layout, dialogs, async messages
 ├── pdf_ops.rs     # merge / split / extract / remove (lopdf)
-└── img_ops.rs     # images → PDF and PDF → images
+├── img_ops.rs     # images → PDF and PDF → images (calls pdftoppm)
+└── setup.rs       # resolves the Poppler folder at runtime
+
+assets/
+├── simple_pdf_manager.ico   # app + task-bar icon
+└── poppler/                 # 42 Poppler DLLs and tools (Windows)
 ```
 
 ## Author
