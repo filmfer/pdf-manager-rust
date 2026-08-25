@@ -21,16 +21,11 @@ pub fn merge_pdfs(input_paths: &[String], output_path: &str) -> Result<()> {
     let mut base_objects = base.objects.clone();
 
     for input in &input_paths[1..] {
-        let other = Document::load(input)
-            .with_context(|| format!("Failed to open {}", input))?;
+        let other = Document::load(input).with_context(|| format!("Failed to open {}", input))?;
         let other_pages = other.get_pages();
         let other_objects = other.objects;
 
-        let max_id = base_objects
-            .keys()
-            .map(|(n, _)| *n)
-            .max()
-            .unwrap_or(0);
+        let max_id = base_objects.keys().map(|(n, _)| *n).max().unwrap_or(0);
 
         let mut id_remap: BTreeMap<u32, ObjectId> = BTreeMap::new();
         for &(n, _) in other_objects.keys() {
@@ -103,10 +98,7 @@ fn remap_object(obj: Object, id_remap: &BTreeMap<u32, ObjectId>) -> Object {
             }
         }
         Object::Array(a) => {
-            let new_a: Vec<Object> = a
-                .into_iter()
-                .map(|o| remap_object(o, id_remap))
-                .collect();
+            let new_a: Vec<Object> = a.into_iter().map(|o| remap_object(o, id_remap)).collect();
             Object::Array(new_a)
         }
         Object::Dictionary(d) => {
@@ -189,11 +181,7 @@ pub fn remove_pages(input: &str, output: &str, pages_to_remove: &[u32]) -> Resul
     let total_pages = doc.get_pages().len() as u32;
     for &p in pages_to_remove {
         if p < 1 || p > total_pages {
-            anyhow::bail!(
-                "Page {} is out of range (PDF has {} pages)",
-                p,
-                total_pages
-            );
+            anyhow::bail!("Page {} is out of range (PDF has {} pages)", p, total_pages);
         }
     }
     let mut unique: Vec<u32> = pages_to_remove

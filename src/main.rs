@@ -63,4 +63,3 @@ fn load_app_icon() -> Option<egui::IconData> {
         height: h,
     })
 }
-

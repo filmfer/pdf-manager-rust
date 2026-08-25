@@ -25,8 +25,8 @@ fn downscale_to_fit(img: DynamicImage, max_long_side: u32) -> DynamicImage {
 /// Convert one image file to (encoded bytes, filter name, color space name, w, h).
 /// Uses JPEG @ 85% quality for photos, PNG (lossless) for grayscale text-style images.
 fn encode_image(path_str: &str) -> Result<(Vec<u8>, String, String, u32, u32)> {
-    let bytes = fs::read(path_str)
-        .with_context(|| format!("Failed to read image: {}", path_str))?;
+    let bytes =
+        fs::read(path_str).with_context(|| format!("Failed to read image: {}", path_str))?;
     let img = ImageReader::new(Cursor::new(&bytes))
         .with_guessed_format()
         .with_context(|| format!("Failed to detect format: {}", path_str))?
@@ -84,10 +84,7 @@ pub fn images_to_pdf(image_paths: &[String], output: &str) -> Result<()> {
         // is a common "screen" size (~72 DPI). The image preserves its full quality.
         let w_pt = w as f32;
         let h_pt = h as f32;
-        let content = format!(
-            "q\n{} 0 0 {} 0 0 cm\n/Im{} Do\nQ\n",
-            w_pt, h_pt, idx
-        );
+        let content = format!("q\n{} 0 0 {} 0 0 cm\n/Im{} Do\nQ\n", w_pt, h_pt, idx);
         let content_stream = lopdf::Stream::new(lopdf::Dictionary::new(), content.into_bytes());
         let content_id = doc.add_object(content_stream);
 
@@ -175,11 +172,18 @@ pub fn pdf_to_images(
 
     let status = Command::new(&pdftoppm)
         .arg(fmt_flag)
-        .arg("-r").arg(dpi.to_string())
-        .arg("-f").arg(first_page.to_string())
-        .arg("-l").arg(last_page.to_string())
+        .arg("-r")
+        .arg(dpi.to_string())
+        .arg("-f")
+        .arg(first_page.to_string())
+        .arg("-l")
+        .arg(last_page.to_string())
         .arg(pdf_path)
-        .arg(format!("{}/{}", output_dir.trim_end_matches('/').trim_end_matches('\\'), stem))
+        .arg(format!(
+            "{}/{}",
+            output_dir.trim_end_matches('/').trim_end_matches('\\'),
+            stem
+        ))
         .status()
         .with_context(|| format!("Failed to launch pdftoppm at {:?}", pdftoppm))?;
 

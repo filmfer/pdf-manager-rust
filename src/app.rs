@@ -182,7 +182,11 @@ impl PdfManagerApp {
                     // Colour the rect with ACCENT (normal) / ACCENT_HOVER
                     // (hovered) — the same hover effect the Tkinter
                     // <Enter>/<Leave> bindings produced.
-                    let fill = if response.hovered() { ACCENT_HOVER } else { ACCENT };
+                    let fill = if response.hovered() {
+                        ACCENT_HOVER
+                    } else {
+                        ACCENT
+                    };
                     ui.painter().rect_filled(rect, 3.0, fill);
                     ui.painter().text(
                         rect.center(),
@@ -382,20 +386,22 @@ impl PdfManagerApp {
         };
         self.extract_open = false;
         let tx = self.tx.clone();
-        thread::spawn(move || match pdf_ops::extract_pages(&path, &output, start, end) {
-            Ok(_) => {
-                let _ = tx.send(OperationMsg::Success(format!(
-                    "Pages extracted successfully!\nSaved to:\n{}",
-                    output
-                )));
-            }
-            Err(e) => {
-                let _ = tx.send(OperationMsg::Error(format!(
-                    "Failed to extract pages:\n{}",
-                    e
-                )));
-            }
-        });
+        thread::spawn(
+            move || match pdf_ops::extract_pages(&path, &output, start, end) {
+                Ok(_) => {
+                    let _ = tx.send(OperationMsg::Success(format!(
+                        "Pages extracted successfully!\nSaved to:\n{}",
+                        output
+                    )));
+                }
+                Err(e) => {
+                    let _ = tx.send(OperationMsg::Error(format!(
+                        "Failed to extract pages:\n{}",
+                        e
+                    )));
+                }
+            },
+        );
     }
 
     fn action_open_remove(&mut self) {
@@ -488,9 +494,9 @@ impl PdfManagerApp {
             }
         };
         if pages.is_empty() {
-            let _ = self
-                .tx
-                .send(OperationMsg::Error("Please specify at least one page.".to_string()));
+            let _ = self.tx.send(OperationMsg::Error(
+                "Please specify at least one page.".to_string(),
+            ));
             return;
         }
         let total = self.remove_input_page_count;
@@ -513,20 +519,22 @@ impl PdfManagerApp {
         };
         self.remove_open = false;
         let tx = self.tx.clone();
-        thread::spawn(move || match pdf_ops::remove_pages(&path, &output, &pages) {
-            Ok(_) => {
-                let _ = tx.send(OperationMsg::Success(format!(
-                    "Pages removed successfully!\nSaved to:\n{}",
-                    output
-                )));
-            }
-            Err(e) => {
-                let _ = tx.send(OperationMsg::Error(format!(
-                    "Failed to remove pages:\n{}",
-                    e
-                )));
-            }
-        });
+        thread::spawn(
+            move || match pdf_ops::remove_pages(&path, &output, &pages) {
+                Ok(_) => {
+                    let _ = tx.send(OperationMsg::Success(format!(
+                        "Pages removed successfully!\nSaved to:\n{}",
+                        output
+                    )));
+                }
+                Err(e) => {
+                    let _ = tx.send(OperationMsg::Error(format!(
+                        "Failed to remove pages:\n{}",
+                        e
+                    )));
+                }
+            },
+        );
     }
 
     fn action_split(&mut self) {
@@ -599,10 +607,7 @@ impl PdfManagerApp {
                 )));
             }
             Err(e) => {
-                let _ = tx.send(OperationMsg::Error(format!(
-                    "Failed to create PDF:\n{}",
-                    e
-                )));
+                let _ = tx.send(OperationMsg::Error(format!("Failed to create PDF:\n{}", e)));
             }
         });
     }

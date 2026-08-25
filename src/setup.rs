@@ -58,7 +58,11 @@ pub fn find_pdftoppm() -> Option<PathBuf> {
     // 2. Check next to the executable.
     if let Ok(exe) = std::env::current_exe() {
         if let Some(p) = exe.parent() {
-            let candidate = p.join(if cfg!(windows) { "pdftoppm.exe" } else { "pdftoppm" });
+            let candidate = p.join(if cfg!(windows) {
+                "pdftoppm.exe"
+            } else {
+                "pdftoppm"
+            });
             if candidate.exists() {
                 return Some(candidate);
             }
@@ -68,7 +72,11 @@ pub fn find_pdftoppm() -> Option<PathBuf> {
     // 3. Check the system PATH.
     if let Ok(path_var) = std::env::var("PATH") {
         for entry in std::env::split_paths(&path_var) {
-            let candidate = entry.join(if cfg!(windows) { "pdftoppm.exe" } else { "pdftoppm" });
+            let candidate = entry.join(if cfg!(windows) {
+                "pdftoppm.exe"
+            } else {
+                "pdftoppm"
+            });
             if candidate.exists() {
                 return Some(candidate);
             }
