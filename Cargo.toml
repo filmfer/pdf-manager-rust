@@ -1,0 +1,22 @@
+[package]
+name = "pdf-manager-rust"
+version = "0.1.0"
+edition = "2021"
+description = "A simple PDF manager - merge, split, extract, remove pages, images to/from PDF"
+authors = ["Filipe Fernandes <filmfer@gmail.com>"]
+license = "MIT"
+
+[dependencies]
+anyhow = "1.0"
+eframe = "0.32"
+egui = "0.32"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "bmp", "tiff", "gif", "webp", "ico", "pnm"] }
+lopdf = "0.34"
+rfd = "0.15"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
