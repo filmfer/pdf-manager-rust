@@ -17,12 +17,11 @@ fn main() -> eframe::Result<()> {
         eprintln!("Warning: could not extract bundled Poppler: {}", e);
     }
 
-    // Match the geometry of the original Tkinter app exactly: `560x520`
-    // initial, min `460x400`. This makes the Rust build look and feel
-    // identical to the Python version of "simple PDF Manager".
+    // Match the geometry requested by the user: `560x700` initial (taller
+    // window so the buttons fill almost the whole height), min `460x580`.
     let viewport = egui::ViewportBuilder::default()
-        .with_inner_size([560.0, 520.0])
-        .with_min_inner_size([460.0, 400.0])
+        .with_inner_size([560.0, 700.0])
+        .with_min_inner_size([460.0, 580.0])
         .with_resizable(false)
         .with_title("simple PDF Manager")
         .with_app_id("com.filmfer.simple-pdf-manager");

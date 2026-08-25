@@ -6,6 +6,11 @@ description = "A simple PDF manager - merge, split, extract, remove pages, image
 authors = ["Filipe Fernandes <filmfer@gmail.com>"]
 license = "MIT"
 
+[features]
+# Embed the application icon (Windows). Disable on CI without rc.exe.
+default = ["windows-icon"]
+windows-icon = ["dep:embed-resource"]
+
 [dependencies]
 anyhow = "1.0"
 eframe = "0.32"
@@ -15,7 +20,7 @@ lopdf = "0.34"
 rfd = "0.15"
 
 [target.'cfg(windows)'.build-dependencies]
-embed-resource = "3"
+embed-resource = { version = "3", optional = true }
 
 [profile.release]
 opt-level = "z"

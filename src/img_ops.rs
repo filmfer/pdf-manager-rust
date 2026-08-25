@@ -112,8 +112,8 @@ pub fn images_to_pdf(image_paths: &[String], output: &str) -> Result<()> {
             Object::Array(vec![
                 Object::Real(0.0),
                 Object::Real(0.0),
-                Object::Real(w_pt as f32),
-                Object::Real(h_pt as f32),
+                Object::Real(w_pt),
+                Object::Real(h_pt),
             ]),
         );
         page_dict.set("Resources", Object::Dictionary(resources));

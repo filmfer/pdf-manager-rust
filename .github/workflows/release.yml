@@ -61,8 +61,30 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install poppler
 
+      - name: Show Rust version
+        run: |
+          rustc --version
+          cargo --version
+
       - name: Build release binary
-        run: cargo build --release --target ${{ matrix.target }} --locked
+        # Use --no-default-features on Windows to avoid the embed-resource crate
+        # failing when the MSVC rc.exe resource compiler isn't on PATH. The
+        # window icon is still loaded at runtime via `load_app_icon()` in main.rs.
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cargo build --release --target ${{ matrix.target }} --locked --no-default-features
+          else
+            cargo build --release --target ${{ matrix.target }} --locked
+          fi
+
+      - name: List build output (debug aid)
+        if: always()
+        shell: bash
+        run: |
+          echo "=== target dir contents ==="
+          ls -la "target/${{ matrix.target }}/release/" 2>/dev/null || ls -la "target/${{ matrix.target }}/" 2>/dev/null || echo "target dir not found"
+          echo "=== target subdirs ==="
+          find target -maxdepth 3 -type d 2>/dev/null || true
 
       - name: Strip & rename Linux binary
         if: runner.os == 'Linux'
@@ -73,6 +95,7 @@ jobs:
 
       - name: Strip & rename Windows binary
         if: runner.os == 'Windows'
+        shell: bash
         run: |
           mv "target/${{ matrix.target }}/release/${{ matrix.binary}}${{ matrix.asset_ext }}" \
              "target/${{ matrix.target }}/release/pdf-manager-rust-${{ matrix.target }}${{ matrix.asset_ext }}"
@@ -117,3 +140,4 @@ jobs:
           fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

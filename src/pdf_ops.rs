@@ -37,7 +37,7 @@ pub fn merge_pdfs(input_paths: &[String], output_path: &str) -> Result<()> {
             base_objects.insert(id_remap[&n], remapped);
         }
 
-        for (_pn, page_id) in &other_pages {
+        for page_id in other_pages.values() {
             let new_page_id = id_remap[&page_id.0];
             base_objects.insert(new_page_id, Object::Reference(new_page_id));
         }
@@ -65,7 +65,7 @@ pub fn merge_pdfs(input_paths: &[String], output_path: &str) -> Result<()> {
             .context("Pages dictionary missing /Kids")?
             .as_array_mut()
             .context("/Kids is not an array")?;
-        for (_pn, page_id) in &other_pages {
+        for page_id in other_pages.values() {
             kids.push(Object::Reference(id_remap[&page_id.0]));
         }
         let count_obj = pages_dict

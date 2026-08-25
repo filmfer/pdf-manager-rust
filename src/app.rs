@@ -150,13 +150,24 @@ impl PdfManagerApp {
         // gap between the buttons and the window limits, exactly as the
         // user asked) and 4 px at the top. Each button uses `fill=tk.X`
         // semantics — it stretches from one side of the window to the
-        // other, with `pady=6` between buttons, matching the Tkinter
-        // `height=2` look.
+        // other, with `pady=8` between buttons, matching the Tkinter
+        // `height=2` look but with much taller buttons so they fill the
+        // full window height (the user asked for buttons that occupy
+        // almost the entire window).
         Frame::default()
             .inner_margin(egui::Margin::symmetric(16, 4))
             .show(ui, |ui| {
-                ui.style_mut().spacing.item_spacing = Vec2::new(0.0, 6.0);
-                let btn_height = 40.0;
+                ui.style_mut().spacing.item_spacing = Vec2::new(0.0, 8.0);
+                // Compute button height from the available height so the
+                // six buttons + 5 gaps fill the whole vertical area, while
+                // leaving room for the footer drawn underneath.
+                //   available = panel_height - header - footer - margins
+                //   per_button = (available - 5 * 8) / 6, but ensure a
+                //   sensible minimum of 60 px so labels stay readable.
+                let footer_reserve: f32 = 26.0; // keep the footer label visible
+                let gaps: f32 = 8.0 * 5.0; // 5 gaps between 6 buttons
+                let available = (ui.available_height() - footer_reserve).max(120.0);
+                let btn_height = ((available - gaps) / 6.0).max(60.0);
                 let labels: [&str; 6] = [
                     "Merge PDFs",
                     "Extract Pages",
@@ -187,12 +198,12 @@ impl PdfManagerApp {
                     } else {
                         ACCENT
                     };
-                    ui.painter().rect_filled(rect, 3.0, fill);
+                    ui.painter().rect_filled(rect, 4.0, fill);
                     ui.painter().text(
                         rect.center(),
                         egui::Align2::CENTER_CENTER,
                         labels[i],
-                        egui::FontId::proportional(13.0),
+                        egui::FontId::proportional(15.0),
                         WHITE,
                     );
                     if response.clicked() {

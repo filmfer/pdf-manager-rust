@@ -4,15 +4,27 @@ use std::path::Path;
 
 fn main() {
     // ── 1. Embed the application icon into the Windows .exe ────────
-    #[cfg(windows)]
+    // Only when the `windows-icon` feature is enabled (on by default).
+    // CI can opt out with `--no-default-features` so that we skip the
+    // `embed-resource` crate entirely (avoids needing rc.exe on the
+    // build host). The icon is still loaded at runtime in `main.rs`.
+    #[cfg(all(windows, feature = "windows-icon"))]
     {
         let ico_path = "assets/simple_pdf_manager.ico";
         if Path::new(ico_path).exists() {
+            // Ignore errors here so that the build still succeeds even
+            // if the host doesn't have rc.exe (e.g. a Linux CI box
+            // cross-compiling for Windows).
             let _ = embed_resource::compile(ico_path, embed_resource::NONE);
         }
     }
 
     // ── 2. Embed the bundled Poppler binaries as Rust byte slices ──
+    // Generates `$OUT_DIR/poppler_assets.rs` containing a const
+    // `POPPLER_FILES: &[(&str, &[u8])]` with every file under
+    // `assets/poppler/`. `setup.rs` `include!`s that file and extracts
+    // the bytes to %LOCALAPPDATA% on first run, making the .exe fully
+    // standalone (the user only needs `pdf-manager-rust.exe`).
     embed_poppler_assets();
 
     println!("cargo:rerun-if-changed=assets/poppler");
