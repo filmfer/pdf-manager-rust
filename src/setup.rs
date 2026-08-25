@@ -18,9 +18,13 @@ mod poppler_assets {
 
 #[cfg(not(windows))]
 mod poppler_assets {
+    // Marked non-dead only on non-Windows: nothing references
+    // POPPLER_FILES there (also matches the Windows build).
+    #[allow(dead_code)]
     pub const POPPLER_FILES: &[(&str, &[u8])] = &[];
 }
 
+#[cfg_attr(not(windows), allow(dead_code))] // only used by the Windows extraction path
 const EXTRACT_ROOT: &str = "pdf-manager-rust";
 
 /// Returns the path where the bundled poppler should be extracted.

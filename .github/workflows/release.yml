@@ -70,6 +70,9 @@ jobs:
         # Use --no-default-features on Windows to avoid the embed-resource crate
         # failing when the MSVC rc.exe resource compiler isn't on PATH. The
         # window icon is still loaded at runtime via `load_app_icon()` in main.rs.
+        # `shell: bash` is required: the step uses bash if/else syntax and the
+        # default shell on Windows runners is PowerShell.
+        shell: bash
         run: |
           if [ "${{ runner.os }}" = "Windows" ]; then
             cargo build --release --target ${{ matrix.target }} --locked --no-default-features
