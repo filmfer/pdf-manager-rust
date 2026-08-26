@@ -1,6 +1,6 @@
 <div align="center">
 
-# simple PDF Manager - Now in RUST
+# simple PDF Manager
 
 <img width="1100" height="614" alt="image" src="https://github.com/user-attachments/assets/1fd8dd9f-9182-41c0-a9a7-2d83921b77b0" />
 
