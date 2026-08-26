@@ -2,7 +2,7 @@
 
 # simple PDF Manager - Now in RUST
 
-<img width="1100" height="614" alt="image" src="https://github.com/user-attachments/assets/b03d82e7-71c5-476d-a25f-184c711644fc" />
+
 
 **Free, open-source PDF toolbox for 🪟 Windows · 🐧 Linux · 🍎 macOS**
 
